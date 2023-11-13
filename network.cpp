@@ -25,9 +25,10 @@ public:
     uint8_t label;
 
     void print() {
+        cout << int(label)  << std::endl;
         for (int i = 0; i < IMAGE_HEIGHT; i++) {
             for (int j = 0; j < IMAGE_WIDTH; j++) {
-                cout << num[i*IMAGE_WIDTH + j] << ' ';
+                cout << (num[i*IMAGE_WIDTH + j] == 0 ? "  " : "* ");
             }
             cout << std::endl;
         }
@@ -35,9 +36,9 @@ public:
 
 
     MatrixXd convertToMatrix() {
-        MatrixXd x(1, IMAGE_SIZE);
+        MatrixXd x(IMAGE_SIZE, 1);
         for (int i = 0; i < IMAGE_SIZE; i++) {
-            x(0, i) = num[i];
+            x(i, 0) = num[i];
         }
         return x;
     }
@@ -58,13 +59,15 @@ public:
         weights.resize(LAYERS_NUM);
 
         for (int i = 1; i < LAYERS_NUM; i++) {
-
             biases[i] = MatrixXd::Random(LAYERS_SIZE[i], 1);
             weights[i] = MatrixXd::Random(LAYERS_SIZE[i], LAYERS_SIZE[i - 1]);
         }
     }
 
     MatrixXd costDerivative(MatrixXd outputActivations, MatrixXd y) {
+        assert(outputActivations.cols() == y.cols());
+        assert(outputActivations.rows() == y.rows());
+
         return outputActivations - y;
     }
 
@@ -106,12 +109,14 @@ public:
         return res;
     }
 
-    void SGD(TrainingData data, int epochs, const int miniBatchSize, const double eta) {
+    void SGD(TrainingData data, int epochs, const int miniBatchSize, const double eta, TrainingData* testData = nullptr) {
         auto rd = std::random_device {};
         auto rng = std::default_random_engine { rd() };
         for (int ep = 0; ep < epochs; ep++) {
             //перемешать
-            //std::shuffle(std::begin(data), std::end(data), rng);
+            //cout << weights[2]  << "\n\n";
+
+            std::shuffle(std::begin(data), std::end(data), rng);
 
             for (size_t step = 0; step < data.size(); step += miniBatchSize) {
                 //выделить кусок
@@ -119,11 +124,14 @@ public:
                 for (int i = 0; i < miniBatchSize; i++) {
                     miniBatch[i].label = data[step + i].label;
                     miniBatch[i].num = data[step + i].num;
-
                 }
 
                 updateMiniBatch(miniBatch, eta);
+            }
 
+            if (testData != nullptr) {
+                int succ = evaluate(*testData);
+                cout << "Epoch " << ep << " " << succ << " / " << testData->size() << "\n";
             }
         }
     }
@@ -132,10 +140,10 @@ public:
 
         vector <MatrixXd> nabla_w, nabla_b;
         for (auto x : weights) {
-            nabla_w.push_back(MatrixXd::Zero(x.rows(), 1));
+            nabla_w.push_back(MatrixXd::Zero(x.rows(), x.cols()));
         }
         for (auto x : biases) {
-            nabla_b.push_back(MatrixXd::Zero(x.rows(), 1));
+            nabla_b.push_back(MatrixXd::Zero(x.rows(), x.cols()));
         }
 
         for (auto x: MiniBatch) {
@@ -149,22 +157,21 @@ public:
             }
 
             for (size_t i = 0; i < nabla_b.size(); i++) {
-                biases[i] = biases[i] - (eta / MiniBatch.size()*nabla_b[i]);
+                biases[i] = biases[i] - (eta / MiniBatch.size())*nabla_b[i];
             }
             for (size_t i = 0; i < nabla_w.size(); i++) {
-                weights[i] = weights[i] - (eta / MiniBatch.size()*nabla_w[i]);
+                weights[i] = weights[i] - (eta / MiniBatch.size())*nabla_w[i];
             }
         }
-
     }
 
     std::tuple <vector<MatrixXd>, vector<MatrixXd>> backprop(Image im) {
-        vector <MatrixXd> nabla_w(LAYERS_NUM), nabla_b(LAYERS_NUM);
+        vector <MatrixXd> nabla_w, nabla_b;
         for (auto x : weights) {
-            nabla_w.push_back(MatrixXd::Zero(x.rows(), 1));
+            nabla_w.push_back(MatrixXd::Zero(x.rows(), x.cols()));
         }
         for (auto x : biases) {
-            nabla_b.push_back(MatrixXd::Zero(x.rows(), 1));
+            nabla_b.push_back(MatrixXd::Zero(x.rows(), x.cols()));
         }
         vector <MatrixXd> activations, zs;
         auto activation = im.convertToMatrix();
@@ -177,24 +184,45 @@ public:
             activation = sigmoidMatrix(z);
             activations.push_back(activation);
         }
-        const int last = LAYERS_NUM - 1;
+        //const int last = LAYERS_NUM - 1;
 
         MatrixXd expectedOuput = MatrixXd::Zero(RESULT_LAYER, 1);
-        expectedOuput(im.label-1, 1) = 1;
+        expectedOuput(im.label, 0) = 1;
 
 
-        MatrixXd delta = costDerivative(activations[last], expectedOuput) * sigmoidPrimeMatrix(zs[last]);
-        nabla_b[last] = delta;
-        nabla_w[last] = delta * activations[last-1].transpose();
+        MatrixXd delta = costDerivative(activations.back(), expectedOuput).cwiseProduct(sigmoidPrimeMatrix(zs.back()));
+        nabla_b.back() = delta;
+        nabla_w.back() = delta * activations[activations.size() - 2].transpose();
 
-        for (int l = last - 2; l >= 2; l--) {
-            MatrixXd z = zs[l];
+        for (int l = 2; l < LAYERS_NUM; l++) {
+            MatrixXd z = zs[zs.size() - l];
             MatrixXd sp = sigmoidPrimeMatrix(z);
-            delta = hadamardProduct(weights[l+1].transpose() * delta, sp);
-            nabla_b[l] = delta;
-            nabla_w[l] = delta * activations[l-1].transpose();
+            MatrixXd td = (weights[weights.size() - l + 1].transpose() * delta);
+            delta = (td.cwiseProduct(sp));
+            nabla_b[nabla_b.size() - l] = delta;
+            nabla_w[nabla_w.size() - l] = delta * activations[activations.size() - l - 1].transpose();
         }
         return {nabla_b, nabla_w};
+    }
+
+    int evaluate(TrainingData testData) {
+        vector <bool> res;
+
+
+        for (auto x: testData) {
+            auto output = feedForward(x.convertToMatrix());
+            int ind = 0;
+            for (int i = 1; i < output.rows(); i++) {
+                if (output(i, 0) > output(ind, 0))
+                ind = i;
+            }
+            res.push_back(ind == x.label);
+        }
+        int sum = 0;
+        for (auto x: res) {
+            sum += x;
+        }
+        return sum;
     }
 };
 
@@ -297,15 +325,23 @@ public:
 int main() {
 
     srand(time(nullptr));
-
     MnistReader mnistReader;
+
     mnistReader.loadTrainingImages();
     mnistReader.loadTestingImages();
 
     Network net;
     //mnistReader.trainingImages[10].print();
+        //cout << "Expected output: " << mnistReader.testingImages[0].label << std::endl;
+        //cout << "Actual output:" << std::endl << net.feedForward(mnistReader.testingImages[0].convertToMatrix()) << std::endl;
 
-    net.SGD(mnistReader.trainingImages, 1, 100, 0.5);
-    cout << net.feedForward(mnistReader.testingImages[0].convertToMatrix());
+    net.SGD(mnistReader.trainingImages, 100, 10, 0.3, &mnistReader.testingImages);
+    for (int i = 0; i < 10; i++) {
+        cout << "Expected output: " << int(mnistReader.testingImages[i].label) << std::endl;
+        cout << "Actual output:" << std::endl << net.feedForward(mnistReader.testingImages[i].convertToMatrix()) << std::endl;
+    }
+//    cout << net.weights[1]  << "\n\n";
+//    cout << net.weights[2]  << "\n\n";
+//    cout << net.weights[3]  << "\n\n";
 
 }
