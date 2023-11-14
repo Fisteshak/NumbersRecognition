@@ -11,6 +11,7 @@
 #include <tuple>
 #include <iomanip>
 #include <functional>
+
 using Eigen::MatrixXd, std::cout, std::cin, std::vector;
 
 std::mt19937_64 random;
@@ -124,7 +125,7 @@ public:
 
             if (testData != nullptr) {
                 int succ = evaluate(*testData);
-                cout << "Epoch " << ep << " " << succ << " / " << testData->size() << "\n";
+                cout << "Epoch: " << ep << " " << succ << " / " << testData->size() << "\n";
             }
         }
     }
@@ -142,10 +143,6 @@ public:
         for (auto x: MiniBatch) {
 
             auto [delta_nabla_b, delta_nabla_w] = backprop(x);
-
-          //  cout << delta_nabla_b[1] << '\n';
-          //  cout << delta_nabla_w[1] << '\n';
-
 
             for (size_t i = 0; i <nabla_b.size(); i++) {
                 nabla_b[i] = nabla_b[i] + delta_nabla_b[i];
@@ -204,7 +201,6 @@ public:
 
     int evaluate(TrainingData testData) {
         vector <bool> res;
-
 
         for (auto x: testData) {
             auto output = feedForward(x.convertToMatrix());
@@ -328,14 +324,9 @@ int main() {
     mnistReader.loadTestingImages();
 
     Network net;
+    net.SGD(mnistReader.trainingImages, 20, 10, 0.1, &mnistReader.testingImages);
 
-    net.SGD(mnistReader.trainingImages, 20, 10, 0.3, &mnistReader.testingImages);
-    for (int i = 0; i < 10; i++) {
-        cout << "Image:" << '\n';
-        mnistReader.testingImages[i].print();
-        cout << "Output:" << std::endl << std::fixed << net.feedForward(mnistReader.testingImages[i].convertToMatrix()) << std::endl;
-    }
-
-
+    int successNum = net.evaluate(mnistReader.testingImages);
+    cout << "Accuracy: " << (double)successNum / mnistReader.testingImages.size() * 100 << "%\n";
 
 }
