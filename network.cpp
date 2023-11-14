@@ -2,6 +2,9 @@
 #include <Eigen/Sparse>
 #include <Eigen/Core>
 
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -11,6 +14,9 @@
 #include <tuple>
 #include <iomanip>
 #include <functional>
+#include <cmath>
+#include <numbers>
+#include <string>
 
 using Eigen::MatrixXd, std::cout, std::cin, std::vector;
 
@@ -30,7 +36,13 @@ public:
         cout << int(label)  << std::endl;
         for (int i = 0; i < IMAGE_HEIGHT; i++) {
             for (int j = 0; j < IMAGE_WIDTH; j++) {
-                cout << (num[i*IMAGE_WIDTH + j] == 0 ? "  " : "* ");
+                char c;
+                if (num[i*IMAGE_WIDTH + j] == 0) c = ' ';
+                if (num[i*IMAGE_WIDTH + j] > 0 and num[i*IMAGE_WIDTH + j] <= 100) c = '.';
+                if (num[i*IMAGE_WIDTH + j] > 100 and num[i*IMAGE_WIDTH + j] <= 200) c = '*';
+                if (num[i*IMAGE_WIDTH + j] > 200) c = '@';
+
+                cout << c << ' ';
             }
             cout << std::endl;
         }
@@ -78,14 +90,27 @@ public:
         return outputActivations - y;
     }
 
+    static double RELU(const double x) {
+        return x > 0 ? x / 10 : 0;
+    }
+    static double RELUDerivative(const double x) {
+        return x > 0 ? 0.1 : 0;
+    }
+
     static double sigmoid(const double x) {
-        //return x > 0 ? x : 0;
         return 1.0 / (1.0 + exp(-x));
     }
     static double sigmoidPrime(const double x) {
-        //return x > 0 ? 1 : 0;
         return sigmoid(x) * (1 - sigmoid(x));
     }
+
+    static double tanh(const double x) {
+        return std::tanh(x);
+    }
+    static double tanhDerivative(const double x) {
+        return 1 - std::tanh(x) * std::tanh(x);
+    }
+
     MatrixXd activationMatrixFn(MatrixXd z) {
         return z.unaryExpr(activationFn);
     }
@@ -178,7 +203,6 @@ public:
             activation = activationMatrixFn(z);
             activations.push_back(activation);
         }
-        //const int last = LAYERS_NUM - 1;
 
         MatrixXd expectedOuput = MatrixXd::Zero(RESULT_LAYER, 1);
         expectedOuput(im.label, 0) = 1;
@@ -187,8 +211,6 @@ public:
         MatrixXd delta = costDerivative(activations.back(), expectedOuput).cwiseProduct(activationDerivativeMatrixFn(zs.back()));
         nabla_b.back() = delta;
         nabla_w.back() = delta * activations[activations.size() - 2].transpose();
-        //cout << nabla_b[1] << '\n';
-        //cout << nabla_w[1] << '\n';
         for (int l = 2; l < LAYERS_NUM; l++) {
             MatrixXd z = zs[zs.size() - l];
             MatrixXd sp = activationDerivativeMatrixFn(z);
@@ -203,12 +225,7 @@ public:
         vector <bool> res;
 
         for (auto x: testData) {
-            auto output = feedForward(x.convertToMatrix());
-            int ind = 0;
-            for (int i = 1; i < output.rows(); i++) {
-                if (output(i, 0) > output(ind, 0))
-                ind = i;
-            }
+            auto ind = getResult(feedForward(x.convertToMatrix()));
             res.push_back(ind == x.label);
         }
         int sum = 0;
@@ -217,6 +234,15 @@ public:
         }
         return sum;
     }
+    int getResult(MatrixXd output) {
+        int ind = 0;
+        for (int i = 1; i < output.rows(); i++) {
+            if (output(i, 0) > output(ind, 0))
+                ind = i;
+        }
+        return ind;
+    }
+
 };
 
 
@@ -313,7 +339,18 @@ public:
     }
 };
 
+void readImage(vector <uint8_t> &im, std::string filename) {
+    int width, height, bpp;
+    uint8_t* rgb_image = stbi_load(filename.c_str(), &width, &height, &bpp, 3);
 
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            im.push_back(255 - (rgb_image[(i*height + j)*3]));// + rgb_image[i*height + j + 1] + rgb_image[i*height + j + 2]) / 3);
+        }
+    }
+
+    stbi_image_free(rgb_image);
+}
 
 int main() {
 
@@ -324,9 +361,23 @@ int main() {
     mnistReader.loadTestingImages();
 
     Network net;
-    net.SGD(mnistReader.trainingImages, 20, 10, 0.1, &mnistReader.testingImages);
+    net.SGD(mnistReader.trainingImages, 5, 30, 0.2, &mnistReader.testingImages);
 
     int successNum = net.evaluate(mnistReader.testingImages);
     cout << "Accuracy: " << (double)successNum / mnistReader.testingImages.size() * 100 << "%\n";
+
+    for (int i = 0; i < 10; i++) {
+
+        system("mspaint image.png");
+        cin.get();
+        //Image im = mnistReader.testingImages[i];
+        Image im;
+        readImage(im.num, "image.png");
+        //im.label = -1;
+        im.print();
+        cout << "result:" << net.getResult(net.feedForward(im.convertToMatrix())) << std::endl;
+        cout << std::fixed  << net.feedForward(im.convertToMatrix()) << std::endl;
+
+    }
 
 }
