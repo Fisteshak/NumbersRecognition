@@ -10,6 +10,7 @@
 #include <compare>
 #include <tuple>
 #include <iomanip>
+#include <functional>
 using Eigen::MatrixXd, std::cout, std::cin, std::vector;
 
 std::mt19937_64 random;
@@ -18,13 +19,12 @@ const int IMAGE_HEIGHT = 28;
 const int IMAGE_SIZE = IMAGE_WIDTH * IMAGE_HEIGHT;
 const int RESULT_LAYER = 10;
 const int LAYERS_NUM = 4;
-const std::array <int, LAYERS_NUM> LAYERS_SIZE{ IMAGE_SIZE, 100, 10, RESULT_LAYER };
+const std::array <int, LAYERS_NUM> LAYERS_SIZE{ IMAGE_SIZE, 30, 10, RESULT_LAYER };
 
 struct Image {
 public:
     vector <unsigned char> num;
     uint8_t label;
-
     void print() {
         cout << int(label)  << std::endl;
         for (int i = 0; i < IMAGE_HEIGHT; i++) {
@@ -54,6 +54,8 @@ public:
 
 struct Network {
 public:
+    std::function <double(const double)> activationFn = sigmoid;
+    std::function <double(const double)> activationDerivativeFn = sigmoidPrime;
 
     vector <MatrixXd> biases;
     vector <MatrixXd> weights;
@@ -75,8 +77,6 @@ public:
         return outputActivations - y;
     }
 
-
-
     static double sigmoid(const double x) {
         //return x > 0 ? x : 0;
         return 1.0 / (1.0 + exp(-x));
@@ -85,17 +85,17 @@ public:
         //return x > 0 ? 1 : 0;
         return sigmoid(x) * (1 - sigmoid(x));
     }
-    MatrixXd sigmoidMatrix(MatrixXd z) {
-        return z.unaryExpr(&Network::sigmoid);
+    MatrixXd activationMatrixFn(MatrixXd z) {
+        return z.unaryExpr(activationFn);
     }
 
-    MatrixXd sigmoidPrimeMatrix(MatrixXd z) {
-        return z.unaryExpr(&Network::sigmoidPrime);
+    MatrixXd activationDerivativeMatrixFn(MatrixXd z) {
+        return z.unaryExpr(activationDerivativeFn);
     }
 
     MatrixXd feedForward(MatrixXd a) {
         for (int i = 1; i < LAYERS_NUM; i++) {
-            a = sigmoidMatrix(weights[i] * a + biases[i]);
+            a = activationMatrixFn(weights[i] * a + biases[i]);
         }
 
         return a;
@@ -108,7 +108,6 @@ public:
         auto rng = std::default_random_engine { rd() };
         for (int ep = 0; ep < epochs; ep++) {
             //перемешать
-            //cout << weights[2]  << "\n\n";
 
             std::shuffle(std::begin(data), std::end(data), rng);
 
@@ -177,10 +176,9 @@ public:
         activations.push_back(activation);
 
         for (int i = 1; i < LAYERS_NUM; i++) {
-            //a = sigmoidMatrix(weights[i] * a + biases[i]);
             MatrixXd z = weights[i] * activation + biases[i];
             zs.push_back(z);
-            activation = sigmoidMatrix(z);
+            activation = activationMatrixFn(z);
             activations.push_back(activation);
         }
         //const int last = LAYERS_NUM - 1;
@@ -189,14 +187,14 @@ public:
         expectedOuput(im.label, 0) = 1;
 
 
-        MatrixXd delta = costDerivative(activations.back(), expectedOuput).cwiseProduct(sigmoidPrimeMatrix(zs.back()));
+        MatrixXd delta = costDerivative(activations.back(), expectedOuput).cwiseProduct(activationDerivativeMatrixFn(zs.back()));
         nabla_b.back() = delta;
         nabla_w.back() = delta * activations[activations.size() - 2].transpose();
         //cout << nabla_b[1] << '\n';
         //cout << nabla_w[1] << '\n';
         for (int l = 2; l < LAYERS_NUM; l++) {
             MatrixXd z = zs[zs.size() - l];
-            MatrixXd sp = sigmoidPrimeMatrix(z);
+            MatrixXd sp = activationDerivativeMatrixFn(z);
             delta = (weights[weights.size() - l + 1].transpose() * delta).cwiseProduct(sp);
             nabla_b[nabla_b.size() - l] = delta;
             nabla_w[nabla_w.size() - l] = delta * activations[activations.size() - l - 1].transpose();
@@ -330,18 +328,14 @@ int main() {
     mnistReader.loadTestingImages();
 
     Network net;
-    //mnistReader.trainingImages[10].print();
-        //cout << "Expected output: " << mnistReader.testingImages[0].label << std::endl;
-        //cout << "Actual output:" << std::endl << net.feedForward(mnistReader.testingImages[0].convertToMatrix()) << std::endl;
 
-    net.SGD(mnistReader.trainingImages, 30, 10, 1, &mnistReader.testingImages);
+    net.SGD(mnistReader.trainingImages, 20, 10, 0.3, &mnistReader.testingImages);
     for (int i = 0; i < 10; i++) {
         cout << "Image:" << '\n';
         mnistReader.testingImages[i].print();
         cout << "Output:" << std::endl << std::fixed << net.feedForward(mnistReader.testingImages[i].convertToMatrix()) << std::endl;
     }
-//    cout << net.weights[1]  << "\n\n";
-//    cout << net.weights[2]  << "\n\n";
-//    cout << net.weights[3]  << "\n\n";
+
+
 
 }
