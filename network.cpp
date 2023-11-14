@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <compare>
 #include <tuple>
+#include <iomanip>
 using Eigen::MatrixXd, std::cout, std::cin, std::vector;
 
 std::mt19937_64 random;
@@ -17,11 +18,11 @@ const int IMAGE_HEIGHT = 28;
 const int IMAGE_SIZE = IMAGE_WIDTH * IMAGE_HEIGHT;
 const int RESULT_LAYER = 10;
 const int LAYERS_NUM = 4;
-const std::array <int, LAYERS_NUM> LAYERS_SIZE{ IMAGE_SIZE, 16, 16, RESULT_LAYER };
+const std::array <int, LAYERS_NUM> LAYERS_SIZE{ IMAGE_SIZE, 100, 10, RESULT_LAYER };
 
 struct Image {
 public:
-    vector <char> num;
+    vector <unsigned char> num;
     uint8_t label;
 
     void print() {
@@ -38,12 +39,15 @@ public:
     MatrixXd convertToMatrix() {
         MatrixXd x(IMAGE_SIZE, 1);
         for (int i = 0; i < IMAGE_SIZE; i++) {
-            x(i, 0) = num[i];
+            auto t  = double(num[i]) / 255;
+            x(i, 0) = t;
+          //  x(i, 0)  = num[i] == 0 ? 0 : 1;
         }
+        //cout << x;
         return x;
     }
     Image() {};
-    Image(vector <char> num, uint8_t label) : num(num), label(label) {};
+    Image(vector <unsigned char> num, uint8_t label) : num(num), label(label) {};
     auto operator=(const Image& Im) {return Im;};
     auto operator<=>(const Image&) const = default;
 };
@@ -74,9 +78,11 @@ public:
 
 
     static double sigmoid(const double x) {
+        //return x > 0 ? x : 0;
         return 1.0 / (1.0 + exp(-x));
     }
     static double sigmoidPrime(const double x) {
+        //return x > 0 ? 1 : 0;
         return sigmoid(x) * (1 - sigmoid(x));
     }
     MatrixXd sigmoidMatrix(MatrixXd z) {
@@ -96,18 +102,6 @@ public:
     }
     using TrainingData = vector <Image>;
 
-
-    MatrixXd hadamardProduct(MatrixXd a, MatrixXd b) {
-        assert(a.cols() == 1);
-        assert(b.cols() == 1);
-        assert(a.cols() == b.cols());
-
-        MatrixXd res(a.rows(), 1);
-        for (int i = 0; i < a.rows(); i++) {
-            res(i, 0) = a(i, 0) * b(i, 0);
-        }
-        return res;
-    }
 
     void SGD(TrainingData data, int epochs, const int miniBatchSize, const double eta, TrainingData* testData = nullptr) {
         auto rd = std::random_device {};
@@ -149,6 +143,11 @@ public:
         for (auto x: MiniBatch) {
 
             auto [delta_nabla_b, delta_nabla_w] = backprop(x);
+
+          //  cout << delta_nabla_b[1] << '\n';
+          //  cout << delta_nabla_w[1] << '\n';
+
+
             for (size_t i = 0; i <nabla_b.size(); i++) {
                 nabla_b[i] = nabla_b[i] + delta_nabla_b[i];
             }
@@ -193,12 +192,12 @@ public:
         MatrixXd delta = costDerivative(activations.back(), expectedOuput).cwiseProduct(sigmoidPrimeMatrix(zs.back()));
         nabla_b.back() = delta;
         nabla_w.back() = delta * activations[activations.size() - 2].transpose();
-
+        //cout << nabla_b[1] << '\n';
+        //cout << nabla_w[1] << '\n';
         for (int l = 2; l < LAYERS_NUM; l++) {
             MatrixXd z = zs[zs.size() - l];
             MatrixXd sp = sigmoidPrimeMatrix(z);
-            MatrixXd td = (weights[weights.size() - l + 1].transpose() * delta);
-            delta = (td.cwiseProduct(sp));
+            delta = (weights[weights.size() - l + 1].transpose() * delta).cwiseProduct(sp);
             nabla_b[nabla_b.size() - l] = delta;
             nabla_w[nabla_w.size() - l] = delta * activations[activations.size() - l - 1].transpose();
         }
@@ -266,7 +265,7 @@ private:
         images.resize(numberOfImages);
         for (int i = 0; i < numberOfImages; i++) {
             images[i].num.assign(IMAGE_SIZE, 0);
-            fin.read(images[i].num.data(), IMAGE_SIZE);
+            fin.read((char*)images[i].num.data(), IMAGE_SIZE);
         }
     }
 
@@ -335,10 +334,11 @@ int main() {
         //cout << "Expected output: " << mnistReader.testingImages[0].label << std::endl;
         //cout << "Actual output:" << std::endl << net.feedForward(mnistReader.testingImages[0].convertToMatrix()) << std::endl;
 
-    net.SGD(mnistReader.trainingImages, 100, 10, 0.3, &mnistReader.testingImages);
+    net.SGD(mnistReader.trainingImages, 30, 10, 1, &mnistReader.testingImages);
     for (int i = 0; i < 10; i++) {
-        cout << "Expected output: " << int(mnistReader.testingImages[i].label) << std::endl;
-        cout << "Actual output:" << std::endl << net.feedForward(mnistReader.testingImages[i].convertToMatrix()) << std::endl;
+        cout << "Image:" << '\n';
+        mnistReader.testingImages[i].print();
+        cout << "Output:" << std::endl << std::fixed << net.feedForward(mnistReader.testingImages[i].convertToMatrix()) << std::endl;
     }
 //    cout << net.weights[1]  << "\n\n";
 //    cout << net.weights[2]  << "\n\n";
