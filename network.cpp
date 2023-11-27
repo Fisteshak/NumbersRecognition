@@ -21,8 +21,8 @@ using Eigen::MatrixXd, std::cout, std::cin, std::vector;
 
 std::mt19937_64 random;
 
-void Image::print() {
-    cout << int(label) << std::endl;
+void Image::print() const {
+    //cout << int(label) << std::endl;
     for (int i = 0; i < IMAGE_HEIGHT; i++) {
         for (int j = 0; j < IMAGE_WIDTH; j++) {
             char c;
@@ -37,7 +37,7 @@ void Image::print() {
     }
 }
 
-MatrixXd Image::convertToMatrix() {
+MatrixXd Image::convertToMatrix() const {
     MatrixXd x(IMAGE_SIZE, 1);
     for (int i = 0; i < IMAGE_SIZE; i++) {
         auto t = double(num[i]) / 255;
@@ -47,7 +47,7 @@ MatrixXd Image::convertToMatrix() {
 }
 
 
-int MnistReader::reverseInt(const int i) {
+int MnistReader::reverseInt(const int i) const {
     unsigned char c1, c2, c3, c4;
     c1 = i & 255;
     c2 = (i >> 8) & 255;
@@ -120,7 +120,7 @@ void MnistReader::loadTestingImages() {
     loadImages("data/t10k-images.idx3-ubyte", "data/t10k-labels.idx1-ubyte", testingImages);
 }
 
-void MnistReader::printImage(const Image& im) {
+void MnistReader::printImage(const Image& im)  const{
     cout << (int)im.label << '\n';
     for (int i = 0; i < IMAGE_HEIGHT; i++) {
         for (int j = 0; j < IMAGE_WIDTH; j++) {
@@ -253,25 +253,21 @@ std::tuple <vector<MatrixXd>, vector<MatrixXd>> Network::backprop(Image im) {
 }
 
 int Network::evaluate(TrainingData testData) {
-    vector <bool> res;
+    std::vector<bool> res(testData.size());
 
-    for (auto x : testData) {
+    std::transform(testData.begin(), testData.end(), res.begin(), [this](auto& x) {
         auto ind = getResult(feedForward(x.convertToMatrix()));
-        res.push_back(ind == x.label);
-    }
-    int sum = 0;
-    for (auto x : res) {
-        sum += x;
-    }
+        return ind == x.label;
+    });
+
+    int sum = std::accumulate(res.begin(), res.end(), 0);
+
     return sum;
 }
-int Network::getResult(MatrixXd output) {
-    int ind = 0;
-    for (int i = 1; i < output.rows(); i++) {
-        if (output(i, 0) > output(ind, 0))
-            ind = i;
-    }
-    return ind;
+int Network::getResult(MatrixXd output) const {
+    Eigen::Index maxRow, maxCol;
+    output.maxCoeff(&maxRow, &maxCol);
+    return maxRow;
 }
 
 void Network::loadToFile(std::string filename) {

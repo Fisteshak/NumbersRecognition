@@ -30,8 +30,8 @@ struct Image {
 public:
     vector <unsigned char> num;
     uint8_t label;
-    void print();
-    MatrixXd convertToMatrix();
+    void print() const;
+    MatrixXd convertToMatrix() const;
     Image() {};
     Image(vector <unsigned char> num, uint8_t label) : num(num), label(label) {};
     auto operator=(const Image& Im) {return Im;};
@@ -40,7 +40,7 @@ public:
 
 struct MnistReader {
 private:
-    int reverseInt(const int i);
+    int reverseInt(const int i) const;
     void loadNumbers(const std::string& filename, vector<Image>& images);
     void loadLabels(const std::string& filename, vector<Image>& images);
     void loadImages(const std::string& filename_numbers, const std::string& filename_labels, vector<Image>& images);
@@ -50,7 +50,7 @@ public:
     vector <Image> testingImages;
     void loadTrainingImages();
     void loadTestingImages();
-    void printImage(const Image& im);
+    void printImage(const Image& im) const;
 };
 
 
@@ -63,7 +63,7 @@ public:
     void SGD(TrainingData data, int epochs, const int miniBatchSize, const double eta, TrainingData* testData);
     int evaluate(TrainingData testData);
     MatrixXd feedForward(MatrixXd a);
-    int getResult(MatrixXd output);
+    int getResult(MatrixXd output) const;
     void loadToFile(std::string filename);
     void loadFromFile(std::string filename);
 

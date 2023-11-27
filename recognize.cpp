@@ -26,6 +26,22 @@ void readImage(vector <uint8_t>& im, std::string filename) {
 int main() {
     Network net;
     net.loadFromFile("net.data");
+
+    MnistReader reader;
+    reader.loadTestingImages();
+
+    std::cout << "                      Welcome to ImageGPT5!\n";
+    std::cout << "----------------------------------------------------------------------\n";
+    std::cout << "To start recognizing draw digit, close paint and press any key.\n";
+    std::cout << "To exit type :exit and press enter.\n";
+    int succ = net.evaluate(reader.testingImages);
+    std::cout << "----------------------------------------------------------------------\n";
+    std::cout << "Expected accuracy: " << succ << " / " << reader.testingImages.size() << "\n";
+    std::cout << "----------------------------------------------------------------------\n";
+
+
+    std::cout << "Press any key to continue.\n";;
+    std::cin.get();
     while (true) {
         std::string input;
         system("mspaint image.png");
@@ -36,8 +52,9 @@ int main() {
         Image im;
         readImage(im.num, "image.png");
         im.print();
-        cout << "result:" << net.getResult(net.feedForward(im.convertToMatrix())) << std::endl;
-        cout << std::fixed << net.feedForward(im.convertToMatrix()) << std::endl;
+
+        cout << "result: " << net.getResult(net.feedForward(im.convertToMatrix())) << std::endl;
+        cout << "output matrix: \n" << std::fixed << std::setprecision(2) << net.feedForward(im.convertToMatrix()) << std::endl;
 
     }
 }
